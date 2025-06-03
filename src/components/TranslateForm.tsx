@@ -11,11 +11,11 @@ import { FileText, Upload } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 const LANGUAGES = [
-  { code: 'tr', name: 'Türkçe', flag: '🇹🇷' },
+  { code: 'tr', name: 'Turkish', flag: '🇹🇷' },
   { code: 'en', name: 'English', flag: '🇺🇸' },
-  { code: 'fr', name: 'Français', flag: '🇫🇷' },
-  { code: 'de', name: 'Deutsch', flag: '🇩🇪' },
-  { code: 'ro', name: 'Română', flag: '🇷🇴' },
+  { code: 'fr', name: 'French', flag: '🇫🇷' },
+  { code: 'de', name: 'German', flag: '🇩🇪' },
+  { code: 'ro', name: 'Romanian', flag: '🇷🇴' },
 ];
 
 export const TranslateForm = () => {
@@ -30,10 +30,6 @@ export const TranslateForm = () => {
   const handleOCR = async (imageFile: File) => {
     setIsLoading(true);
     try {
-      // Ollama API çağrısı - OCR için
-      const formData = new FormData();
-      formData.append('image', imageFile);
-      
       const ocrResponse = await fetch('http://localhost:11434/api/generate', {
         method: 'POST',
         headers: {
@@ -83,8 +79,12 @@ export const TranslateForm = () => {
 
     setIsLoading(true);
     try {
-      const sourceLangName = LANGUAGES.find(l => l.code === sourceLang)?.name || 'auto-detect';
+      const sourceLangName = LANGUAGES.find(l => l.code === sourceLang)?.name || 'auto-detect language';
       const targetLangName = LANGUAGES.find(l => l.code === targetLang)?.name || 'Turkish';
+
+      const prompt = sourceLang === 'auto' 
+        ? `Translate the following text to ${targetLangName}. Only return the translation, nothing else:\n\n${sourceText}`
+        : `Translate the following text from ${sourceLangName} to ${targetLangName}. Only return the translation, nothing else:\n\n${sourceText}`;
 
       const response = await fetch('http://localhost:11434/api/generate', {
         method: 'POST',
@@ -93,7 +93,7 @@ export const TranslateForm = () => {
         },
         body: JSON.stringify({
           model: 'llama3.2-vision',
-          prompt: `Translate the following text from ${sourceLangName} to ${targetLangName}. Only return the translation, nothing else:\n\n${sourceText}`,
+          prompt: prompt,
           stream: false
         })
       });
@@ -126,11 +126,23 @@ export const TranslateForm = () => {
       const reader = new FileReader();
       reader.onload = () => {
         const base64 = reader.result as string;
-        resolve(base64.split(',')[1]); // Remove data:image/...;base64, prefix
+        resolve(base64.split(',')[1]);
       };
       reader.onerror = reject;
       reader.readAsDataURL(file);
     });
+  };
+
+  const getDisplayName = (langCode: string) => {
+    const langMap: { [key: string]: string } = {
+      'tr': 'Türkçe',
+      'en': 'English',
+      'fr': 'Français',
+      'de': 'Deutsch',
+      'ro': 'Română',
+      'auto': 'Otomatik Algıla'
+    };
+    return langMap[langCode] || langCode;
   };
 
   return (
@@ -151,7 +163,7 @@ export const TranslateForm = () => {
           <Card className="p-6 bg-white/70 backdrop-blur-sm border-blue-200">
             <div className="grid md:grid-cols-2 gap-6">
               <LanguageSelector
-                languages={[{ code: 'auto', name: 'Otomatik Algıla', flag: '🌐' }, ...LANGUAGES]}
+                languages={[{ code: 'auto', name: 'Auto-detect', flag: '🌐' }, ...LANGUAGES]}
                 value={sourceLang}
                 onChange={setSourceLang}
                 label="Kaynak Dil"
@@ -187,7 +199,7 @@ export const TranslateForm = () => {
           {translatedText && (
             <TranslateResult
               text={translatedText}
-              language={LANGUAGES.find(l => l.code === targetLang)?.name || 'Türkçe'}
+              language={getDisplayName(targetLang)}
             />
           )}
         </TabsContent>
@@ -196,7 +208,7 @@ export const TranslateForm = () => {
           <Card className="p-6 bg-white/70 backdrop-blur-sm border-blue-200">
             <div className="grid md:grid-cols-2 gap-6">
               <LanguageSelector
-                languages={[{ code: 'auto', name: 'Otomatik Algıla', flag: '🌐' }, ...LANGUAGES]}
+                languages={[{ code: 'auto', name: 'Auto-detect', flag: '🌐' }, ...LANGUAGES]}
                 value={sourceLang}
                 onChange={setSourceLang}
                 label="Kaynak Dil"
@@ -244,7 +256,7 @@ export const TranslateForm = () => {
           {translatedText && (
             <TranslateResult
               text={translatedText}
-              language={LANGUAGES.find(l => l.code === targetLang)?.name || 'Türkçe'}
+              language={getDisplayName(targetLang)}
             />
           )}
         </TabsContent>
