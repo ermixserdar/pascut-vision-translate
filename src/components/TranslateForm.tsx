@@ -82,9 +82,11 @@ export const TranslateForm = () => {
       const sourceLangName = LANGUAGES.find(l => l.code === sourceLang)?.name || 'auto-detect language';
       const targetLangName = LANGUAGES.find(l => l.code === targetLang)?.name || 'Turkish';
 
+      const systemPrompt = "You are a professional translator with expertise in multiple languages. Your task is to provide accurate, formal, and professional translations while maintaining the original meaning and context. Always use formal language and professional terminology appropriate for business or academic settings.";
+
       const prompt = sourceLang === 'auto' 
-        ? `Translate the following text to ${targetLangName}. Only return the translation, nothing else:\n\n${sourceText}`
-        : `Translate the following text from ${sourceLangName} to ${targetLangName}. Only return the translation, nothing else:\n\n${sourceText}`;
+        ? `${systemPrompt}\n\nTranslate the following text to ${targetLangName} using formal and professional language. Only return the translation, nothing else:\n\n${sourceText}`
+        : `${systemPrompt}\n\nTranslate the following text from ${sourceLangName} to ${targetLangName} using formal and professional language. Only return the translation, nothing else:\n\n${sourceText}`;
 
       const response = await fetch('http://localhost:11434/api/generate', {
         method: 'POST',
