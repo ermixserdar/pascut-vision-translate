@@ -1,14 +1,15 @@
-
 import React, { useState } from 'react';
 import { FileUpload } from './FileUpload';
+import { PdfUpload } from './PdfUpload';
 import { LanguageSelector } from './LanguageSelector';
 import { TranslateResult } from './TranslateResult';
 import { TextInput } from './TextInput';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { FileText, Upload } from 'lucide-react';
+import { FileText, Upload, FileImage } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { extractTextFromPdf } from '@/utils/pdfUtils';
 
 const LANGUAGES = [
   { code: 'tr', name: 'Turkish', flag: '🇹🇷' },
@@ -26,6 +27,33 @@ export const TranslateForm = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [uploadedImage, setUploadedImage] = useState<File | null>(null);
   const { toast } = useToast();
+
+  const handlePDF = async (pdfFile: File) => {
+    setIsLoading(true);
+    try {
+      // PDF'den metin çıkarma
+      const extractedText = await extractTextFromPdf(pdfFile);
+      
+      if (!extractedText.trim()) {
+        throw new Error('PDF\'den metin çıkarılamadı');
+      }
+      
+      setSourceText(extractedText);
+      toast({
+        title: "PDF İşlendi",
+        description: "Metin başarıyla PDF'den çıkarıldı",
+      });
+    } catch (error) {
+      console.error('PDF processing error:', error);
+      toast({
+        title: "PDF Hatası",
+        description: "PDF işlenemedi. Lütfen farklı bir dosya deneyin.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleOCR = async (imageFile: File) => {
     setIsLoading(true);
@@ -150,14 +178,18 @@ export const TranslateForm = () => {
   return (
     <div className="space-y-6">
       <Tabs defaultValue="text" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 bg-white/50 backdrop-blur-sm">
+        <TabsList className="grid w-full grid-cols-3 bg-white/50 backdrop-blur-sm">
           <TabsTrigger value="text" className="flex items-center gap-2">
             <FileText className="w-4 h-4" />
             Metin Çeviri
           </TabsTrigger>
           <TabsTrigger value="ocr" className="flex items-center gap-2">
-            <Upload className="w-4 h-4" />
+            <FileImage className="w-4 h-4" />
             OCR Çeviri
+          </TabsTrigger>
+          <TabsTrigger value="pdf" className="flex items-center gap-2">
+            <Upload className="w-4 h-4" />
+            PDF Çeviri
           </TabsTrigger>
         </TabsList>
 
@@ -202,6 +234,8 @@ export const TranslateForm = () => {
             <TranslateResult
               text={translatedText}
               language={getDisplayName(targetLang)}
+              sourceLang={sourceLang}
+              targetLang={targetLang}
             />
           )}
         </TabsContent>
@@ -259,6 +293,64 @@ export const TranslateForm = () => {
             <TranslateResult
               text={translatedText}
               language={getDisplayName(targetLang)}
+              sourceLang={sourceLang}
+              targetLang={targetLang}
+            />
+          )}
+        </TabsContent>
+
+        <TabsContent value="pdf" className="space-y-6">
+          <Card className="p-6 bg-white/70 backdrop-blur-sm border-blue-200">
+            <div className="grid md:grid-cols-2 gap-6">
+              <LanguageSelector
+                languages={[{ code: 'auto', name: 'Auto-detect', flag: '🌐' }, ...LANGUAGES]}
+                value={sourceLang}
+                onChange={setSourceLang}
+                label="Kaynak Dil"
+              />
+              <LanguageSelector
+                languages={LANGUAGES}
+                value={targetLang}
+                onChange={setTargetLang}
+                label="Hedef Dil"
+              />
+            </div>
+          </Card>
+
+          <PdfUpload
+            onPdfSelect={handlePDF}
+            isLoading={isLoading}
+          />
+
+          {sourceText && (
+            <Card className="p-6 bg-white/70 backdrop-blur-sm border-yellow-200">
+              <TextInput
+                value={sourceText}
+                onChange={setSourceText}
+                placeholder="PDF'den çıkarılan metin..."
+                label="Çıkarılan Metin"
+              />
+            </Card>
+          )}
+
+          {sourceText && (
+            <div className="text-center">
+              <Button
+                onClick={handleTranslate}
+                disabled={isLoading || !sourceText.trim()}
+                className="px-8 py-3 bg-gradient-to-r from-blue-500 via-yellow-500 to-red-500 hover:from-blue-600 hover:via-yellow-600 hover:to-red-600 text-white font-semibold rounded-lg shadow-lg transform hover:scale-105 transition-all duration-200"
+              >
+                {isLoading ? 'Çevriliyor...' : 'Çevir'}
+              </Button>
+            </div>
+          )}
+
+          {translatedText && (
+            <TranslateResult
+              text={translatedText}
+              language={getDisplayName(targetLang)}
+              sourceLang={sourceLang}
+              targetLang={targetLang}
             />
           )}
         </TabsContent>
