@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { FileText, Upload, FileImage, FolderOpen } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { extractTextFromDocument } from '@/utils/documentUtils';
+import { convertPdfToImage } from '@/utils/pdfToImage';
 
 const LANGUAGES = [
   { code: 'tr', name: 'Turkish', flag: '🇹🇷' },
@@ -32,77 +33,53 @@ export const TranslateForm = () => {
     try {
       console.log('Starting OCR for file:', file.name, 'Type:', file.type);
       
-      const base64Image = await convertFileToBase64(file);
+      let base64Image: string;
+      
+      if (file.type === 'application/pdf') {
+        console.log('Processing PDF, converting to image first...');
+        base64Image = await convertPdfToImage(file);
+      } else {
+        console.log('Processing image file...');
+        base64Image = await convertFileToBase64(file);
+      }
+      
       console.log('File converted to base64, length:', base64Image.length);
 
-      if (file.type === 'application/pdf') {
-        // PDF'i OCR olarak işle (görüntü gibi)
-        console.log('Processing PDF with OCR...');
-        const ocrResponse = await fetch('http://localhost:11434/api/generate', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: 'llama3.2-vision',
-            prompt: 'Extract all text from this PDF document. Only return the extracted text, nothing else.',
-            images: [base64Image],
-            stream: false
-          })
-        });
+      // OCR işlemi
+      console.log('Starting OCR with vision model...');
+      const ocrResponse = await fetch('http://localhost:11434/api/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'llama3.2-vision',
+          prompt: 'Extract all text from this image. Only return the extracted text, nothing else.',
+          images: [base64Image],
+          stream: false
+        })
+      });
 
-        console.log('OCR response status:', ocrResponse.status);
-        if (!ocrResponse.ok) {
-          const errorText = await ocrResponse.text();
-          console.error('OCR response error:', errorText);
-          throw new Error('PDF OCR işlemi başarısız');
-        }
-
-        const ocrData = await ocrResponse.json();
-        const extractedText = ocrData.response;
-        
-        setSourceText(extractedText);
-        toast({
-          title: "PDF OCR Başarılı",
-          description: "Metin başarıyla PDF'den çıkarıldı",
-        });
-      } else {
-        // Diğer görüntü dosyaları için normal OCR
-        console.log('Processing image with OCR...');
-        const ocrResponse = await fetch('http://localhost:11434/api/generate', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: 'llama3.2-vision',
-            prompt: 'Extract all text from this image. Only return the extracted text, nothing else.',
-            images: [base64Image],
-            stream: false
-          })
-        });
-
-        console.log('OCR response status:', ocrResponse.status);
-        if (!ocrResponse.ok) {
-          const errorText = await ocrResponse.text();
-          console.error('OCR response error:', errorText);
-          throw new Error('OCR işlemi başarısız');
-        }
-
-        const ocrData = await ocrResponse.json();
-        const extractedText = ocrData.response;
-        
-        setSourceText(extractedText);
-        toast({
-          title: "OCR Başarılı",
-          description: "Metin başarıyla görüntüden çıkarıldı",
-        });
+      console.log('OCR response status:', ocrResponse.status);
+      if (!ocrResponse.ok) {
+        const errorText = await ocrResponse.text();
+        console.error('OCR response error:', errorText);
+        throw new Error('OCR işlemi başarısız');
       }
+
+      const ocrData = await ocrResponse.json();
+      const extractedText = ocrData.response;
+      
+      setSourceText(extractedText);
+      toast({
+        title: "OCR Başarılı",
+        description: file.type === 'application/pdf' ? "PDF'den metin başarıyla çıkarıldı" : "Görüntüden metin başarıyla çıkarıldı",
+      });
     } catch (error) {
       console.error('OCR error:', error);
       toast({
         title: "OCR Hatası",
-        description: "Dosya formatı desteklenmiyor veya Ollama bağlantısını kontrol edin",
+        description: error instanceof Error ? error.message : "OCR işlemi başarısız",
         variant: "destructive",
       });
     } finally {
@@ -194,69 +171,53 @@ export const TranslateForm = () => {
 
   const convertFileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
-      console.log('Converting file to base64:', file.type);
+      console.log('Converting image file to base64:', file.type);
       
-      if (file.type === 'application/pdf') {
-        // PDF dosyaları için doğrudan base64 dönüşümü
-        const reader = new FileReader();
-        reader.onload = () => {
-          const base64 = reader.result as string;
-          const base64Data = base64.split(',')[1];
-          console.log('PDF converted to base64');
-          resolve(base64Data);
-        };
-        reader.onerror = (error) => {
-          console.error('PDF conversion error:', error);
-          reject(error);
-        };
-        reader.readAsDataURL(file);
-      } else {
-        // Görüntü dosyaları için canvas kullanarak JPEG formatına dönüştür
-        const img = new Image();
-        img.onload = () => {
-          try {
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            
-            if (!ctx) {
-              reject(new Error('Canvas context not available'));
-              return;
-            }
-            
-            // Görüntüyü uygun boyuta getir
-            const maxSize = 1024;
-            let { width, height } = img;
-            
-            if (width > maxSize || height > maxSize) {
-              const ratio = Math.min(maxSize / width, maxSize / height);
-              width *= ratio;
-              height *= ratio;
-            }
-            
-            canvas.width = width;
-            canvas.height = height;
-            
-            // Görüntüyü canvas'a çiz
-            ctx.drawImage(img, 0, 0, width, height);
-            
-            // JPEG formatında base64'e dönüştür
-            const base64 = canvas.toDataURL('image/jpeg', 0.8);
-            const base64Data = base64.split(',')[1];
-            console.log('Image converted to JPEG base64');
-            resolve(base64Data);
-          } catch (error) {
-            console.error('Image conversion error:', error);
-            reject(error);
+      // Sadece görüntü dosyaları için canvas kullanarak JPEG formatına dönüştür
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          
+          if (!ctx) {
+            reject(new Error('Canvas context not available'));
+            return;
           }
-        };
-        
-        img.onerror = (error) => {
-          console.error('Image load error:', error);
-          reject(new Error('Görüntü yüklenemedi'));
-        };
-        
-        img.src = URL.createObjectURL(file);
-      }
+          
+          // Görüntüyü uygun boyuta getir
+          const maxSize = 1024;
+          let { width, height } = img;
+          
+          if (width > maxSize || height > maxSize) {
+            const ratio = Math.min(maxSize / width, maxSize / height);
+            width *= ratio;
+            height *= ratio;
+          }
+          
+          canvas.width = width;
+          canvas.height = height;
+          
+          // Görüntüyü canvas'a çiz
+          ctx.drawImage(img, 0, 0, width, height);
+          
+          // JPEG formatında base64'e dönüştür
+          const base64 = canvas.toDataURL('image/jpeg', 0.8);
+          const base64Data = base64.split(',')[1];
+          console.log('Image converted to JPEG base64');
+          resolve(base64Data);
+        } catch (error) {
+          console.error('Image conversion error:', error);
+          reject(error);
+        }
+      };
+      
+      img.onerror = (error) => {
+        console.error('Image load error:', error);
+        reject(new Error('Görüntü yüklenemedi'));
+      };
+      
+      img.src = URL.createObjectURL(file);
     });
   };
 
