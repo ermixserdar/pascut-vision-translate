@@ -1,4 +1,5 @@
 
+
 import { getDocument } from 'pdfjs-dist';
 
 export const convertPdfToImage = async (file: File): Promise<string> => {
@@ -8,7 +9,7 @@ export const convertPdfToImage = async (file: File): Promise<string> => {
     // PDF.js worker'ını fonksiyon içinde ayarla
     if (typeof window !== 'undefined') {
       const pdfjsLib = await import('pdfjs-dist');
-      pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/4.8.69/pdf.worker.min.js`;
     }
     
     const arrayBuffer = await file.arrayBuffer();
@@ -51,3 +52,4 @@ export const convertPdfToImage = async (file: File): Promise<string> => {
     throw new Error('PDF görüntüye dönüştürülemedi');
   }
 };
+
