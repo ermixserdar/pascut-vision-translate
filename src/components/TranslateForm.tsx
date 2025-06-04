@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
 import { FileUpload } from './FileUpload';
-import { PdfUpload } from './PdfUpload';
+import { DocumentUpload } from './DocumentUpload';
 import { LanguageSelector } from './LanguageSelector';
 import { TranslateResult } from './TranslateResult';
 import { TextInput } from './TextInput';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { FileText, Upload, FileImage } from 'lucide-react';
+import { FileText, Upload, FileImage, FolderOpen } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { extractTextFromPdf } from '@/utils/pdfUtils';
+import { extractTextFromDocument } from '@/utils/documentUtils';
 
 const LANGUAGES = [
   { code: 'tr', name: 'Turkish', flag: '🇹🇷' },
@@ -25,29 +25,71 @@ export const TranslateForm = () => {
   const [sourceLang, setSourceLang] = useState('auto');
   const [targetLang, setTargetLang] = useState('tr');
   const [isLoading, setIsLoading] = useState(false);
-  const [uploadedImage, setUploadedImage] = useState<File | null>(null);
   const { toast } = useToast();
 
-  const handlePDF = async (pdfFile: File) => {
+  const handleOCR = async (file: File) => {
     setIsLoading(true);
     try {
-      // PDF'den metin çıkarma
-      const extractedText = await extractTextFromPdf(pdfFile);
-      
-      if (!extractedText.trim()) {
-        throw new Error('PDF\'den metin çıkarılamadı');
+      if (file.type === 'application/pdf') {
+        // PDF'i OCR olarak işle (görüntü gibi)
+        const ocrResponse = await fetch('http://localhost:11434/api/generate', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'llama3.2-vision',
+            prompt: 'Extract all text from this PDF document. Only return the extracted text, nothing else.',
+            images: [await convertFileToBase64(file)],
+            stream: false
+          })
+        });
+
+        if (!ocrResponse.ok) {
+          throw new Error('PDF OCR işlemi başarısız');
+        }
+
+        const ocrData = await ocrResponse.json();
+        const extractedText = ocrData.response;
+        
+        setSourceText(extractedText);
+        toast({
+          title: "PDF OCR Başarılı",
+          description: "Metin başarıyla PDF'den çıkarıldı",
+        });
+      } else {
+        // Diğer görüntü dosyaları için normal OCR
+        const ocrResponse = await fetch('http://localhost:11434/api/generate', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'llama3.2-vision',
+            prompt: 'Extract all text from this image. Only return the extracted text, nothing else.',
+            images: [await convertFileToBase64(file)],
+            stream: false
+          })
+        });
+
+        if (!ocrResponse.ok) {
+          throw new Error('OCR işlemi başarısız');
+        }
+
+        const ocrData = await ocrResponse.json();
+        const extractedText = ocrData.response;
+        
+        setSourceText(extractedText);
+        toast({
+          title: "OCR Başarılı",
+          description: "Metin başarıyla görüntüden çıkarıldı",
+        });
       }
-      
-      setSourceText(extractedText);
-      toast({
-        title: "PDF İşlendi",
-        description: "Metin başarıyla PDF'den çıkarıldı",
-      });
     } catch (error) {
-      console.error('PDF processing error:', error);
+      console.error('OCR error:', error);
       toast({
-        title: "PDF Hatası",
-        description: "PDF işlenemedi. Lütfen farklı bir dosya deneyin.",
+        title: "OCR Hatası",
+        description: "Ollama bağlantısını kontrol edin (localhost:11434)",
         variant: "destructive",
       });
     } finally {
@@ -55,39 +97,25 @@ export const TranslateForm = () => {
     }
   };
 
-  const handleOCR = async (imageFile: File) => {
+  const handleDocument = async (file: File) => {
     setIsLoading(true);
     try {
-      const ocrResponse = await fetch('http://localhost:11434/api/generate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'llama3.2-vision',
-          prompt: 'Extract all text from this image. Only return the extracted text, nothing else.',
-          images: [await convertImageToBase64(imageFile)],
-          stream: false
-        })
-      });
-
-      if (!ocrResponse.ok) {
-        throw new Error('OCR işlemi başarısız');
+      const extractedText = await extractTextFromDocument(file);
+      
+      if (!extractedText.trim()) {
+        throw new Error('Dosyadan metin çıkarılamadı');
       }
-
-      const ocrData = await ocrResponse.json();
-      const extractedText = ocrData.response;
       
       setSourceText(extractedText);
       toast({
-        title: "OCR Başarılı",
-        description: "Metin başarıyla görüntüden çıkarıldı",
+        title: "Döküman İşlendi",
+        description: "Metin başarıyla dosyadan çıkarıldı",
       });
     } catch (error) {
-      console.error('OCR error:', error);
+      console.error('Document processing error:', error);
       toast({
-        title: "OCR Hatası",
-        description: "Ollama bağlantısını kontrol edin (localhost:11434)",
+        title: "Döküman Hatası",
+        description: error instanceof Error ? error.message : "Dosya işlenemedi",
         variant: "destructive",
       });
     } finally {
@@ -151,7 +179,7 @@ export const TranslateForm = () => {
     }
   };
 
-  const convertImageToBase64 = (file: File): Promise<string> => {
+  const convertFileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => {
@@ -178,7 +206,7 @@ export const TranslateForm = () => {
   return (
     <div className="space-y-6">
       <Tabs defaultValue="text" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 bg-white/50 backdrop-blur-sm">
+        <TabsList className="grid w-full grid-cols-4 bg-white/50 backdrop-blur-sm">
           <TabsTrigger value="text" className="flex items-center gap-2">
             <FileText className="w-4 h-4" />
             Metin Çeviri
@@ -187,9 +215,9 @@ export const TranslateForm = () => {
             <FileImage className="w-4 h-4" />
             OCR Çeviri
           </TabsTrigger>
-          <TabsTrigger value="pdf" className="flex items-center gap-2">
-            <Upload className="w-4 h-4" />
-            PDF Çeviri
+          <TabsTrigger value="document" className="flex items-center gap-2">
+            <FolderOpen className="w-4 h-4" />
+            Döküman Çeviri
           </TabsTrigger>
         </TabsList>
 
@@ -259,10 +287,7 @@ export const TranslateForm = () => {
           </Card>
 
           <FileUpload
-            onFileSelect={(file) => {
-              setUploadedImage(file);
-              handleOCR(file);
-            }}
+            onFileSelect={handleOCR}
             isLoading={isLoading}
           />
 
@@ -299,7 +324,7 @@ export const TranslateForm = () => {
           )}
         </TabsContent>
 
-        <TabsContent value="pdf" className="space-y-6">
+        <TabsContent value="document" className="space-y-6">
           <Card className="p-6 bg-white/70 backdrop-blur-sm border-blue-200">
             <div className="grid md:grid-cols-2 gap-6">
               <LanguageSelector
@@ -317,8 +342,8 @@ export const TranslateForm = () => {
             </div>
           </Card>
 
-          <PdfUpload
-            onPdfSelect={handlePDF}
+          <DocumentUpload
+            onDocumentSelect={handleDocument}
             isLoading={isLoading}
           />
 
@@ -327,7 +352,7 @@ export const TranslateForm = () => {
               <TextInput
                 value={sourceText}
                 onChange={setSourceText}
-                placeholder="PDF'den çıkarılan metin..."
+                placeholder="Dökümannen çıkarılan metin..."
                 label="Çıkarılan Metin"
               />
             </Card>

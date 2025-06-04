@@ -19,7 +19,8 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect, isLoading 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: {
-      'image/*': ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp']
+      'image/*': ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp'],
+      'application/pdf': ['.pdf']
     },
     multiple: false
   });
@@ -46,13 +47,13 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect, isLoading 
           <div>
             <p className="text-lg font-medium text-gray-700 mb-2">
               {isLoading
-                ? 'Görüntü işleniyor...'
+                ? 'Dosya işleniyor...'
                 : isDragActive
                 ? 'Dosyayı buraya bırakın'
-                : 'OCR için görüntü yükleyin'}
+                : 'OCR için dosya yükleyin'}
             </p>
             <p className="text-sm text-gray-500">
-              PNG, JPG, JPEG, GIF, BMP veya WebP formatlarında görüntü seçin
+              PNG, JPG, JPEG, GIF, BMP, WebP veya PDF formatlarında dosya seçin
             </p>
           </div>
         </div>
